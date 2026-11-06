@@ -58,7 +58,12 @@ export function usd(v: any, opts: { compact?: boolean; sign?: boolean; dp?: numb
   return `${sign}${v < 0 ? '−' : ''}$${a.toLocaleString(undefined, { minimumFractionDigits: opts.dp ?? (a < 100 ? 2 : 0), maximumFractionDigits: opts.dp ?? (a < 100 ? 2 : 0) })}`;
 }
 export const pct = (v: any, dp = 0, sign = false) => (isNum(v) ? `${sign && v > 0 ? '+' : ''}${(v * 100).toFixed(dp)}%` : null);
-export const cents = (v: any) => (isNum(v) ? `${(v * 100).toFixed(v * 100 < 10 ? 1 : 0)}¢` : null);
+export const cents = (v: any) => {
+  if (!isNum(v)) return null;
+  const c = v * 100;
+  const dp = c < 10 || Math.abs(c - Math.round(c)) > 0.05 ? 1 : 0; // keep sub-cent ticks visible (e.g. 97.1¢)
+  return `${c.toFixed(dp)}¢`;
+};
 export const centsDelta = (v: any) => (isNum(v) ? `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v * 100).toFixed(1)}¢` : null);
 export const num = (v: any, dp = 0) => (isNum(v) ? v.toLocaleString(undefined, { maximumFractionDigits: dp, minimumFractionDigits: dp }) : null);
 export function ago(ts: any) {

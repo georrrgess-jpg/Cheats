@@ -120,7 +120,7 @@ export function LineChart({ points, height = 200, format, refs = [], yDomain, la
         <text x={W - P.r} y={H - 4} textAnchor="end" fontSize="10.5" fill="var(--text-3)">{new Date(g.x1 * 1000).toLocaleDateString()}</text>
         {refs.map((r, i) => (
           <g key={i}><line x1={P.l} x2={W - P.r} y1={g.sy(r.v)} y2={g.sy(r.v)} stroke="var(--text-2)" strokeWidth="1" strokeDasharray={r.dash === false ? undefined : '4 4'} />
-            <text x={W - P.r - 2} y={g.sy(r.v) - 4} textAnchor="end" fontSize="10.5" fill="var(--text-2)">{r.label} {format(r.v)}</text></g>
+            <text x={i % 2 ? P.l + 4 : W - P.r - 2} y={g.sy(r.v) + (i % 2 ? 13 : -4)} textAnchor={i % 2 ? 'start' : 'end'} fontSize="10.5" fill="var(--text-2)">{r.label} {format(r.v)}</text></g>
         ))}
         <path d={g.d} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" />
         {hp && <g><line x1={g.sx(hp.ts)} x2={g.sx(hp.ts)} y1={P.t} y2={H - P.b} stroke="var(--border-strong)" />

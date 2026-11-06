@@ -125,13 +125,19 @@ export class PolymarketProvider implements MarketDataProvider {
   }
 
   async getMarkets(conditionIds: string[]): Promise<MarketInfo[]> {
+    // Verified live: Gamma omits CLOSED markets unless closed=true is passed, so query open first, then retry the misses.
     const out: MarketInfo[] = [];
-    for (let i = 0; i < conditionIds.length; i += 50) {
-      const chunk = conditionIds.slice(i, i + 50);
-      const q = chunk.map((c) => `condition_ids=${c}`).join('&');
-      const rows = await this.http.request<any[]>(`${GAMMA}/markets?${q}&include_tag=true&limit=100`);
-      for (const m of rows || []) out.push(this.mapMarket(m));
-    }
+    const fetchChunked = async (ids: string[], extra: string) => {
+      for (let i = 0; i < ids.length; i += 50) {
+        const q = ids.slice(i, i + 50).map((c) => `condition_ids=${c}`).join('&');
+        const rows = await this.http.request<any[]>(`${GAMMA}/markets?${q}&include_tag=true&limit=100${extra}`);
+        for (const m of rows || []) out.push(this.mapMarket(m));
+      }
+    };
+    await fetchChunked(conditionIds, '');
+    const got = new Set(out.map((m) => m.conditionId));
+    const missing = conditionIds.filter((c) => !got.has(c.toLowerCase()));
+    if (missing.length) await fetchChunked(missing, '&closed=true');
     return out;
   }
 

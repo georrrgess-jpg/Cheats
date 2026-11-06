@@ -12,7 +12,7 @@ function Book({ q }: { q: any }) {
     <div className="grid g2" style={{ gap: 12 }}>
       {[['Bids', rows(q.bids), 'pos'], ['Asks', rows(q.asks), 'neg']].map(([t, lv, cls]: any) => (
         <div key={t}><h3>{t}</h3>{!lv.length ? <div className="small faint">empty</div> :
-          <table><tbody>{lv.map((l: any, i: number) => <tr key={i}><td className={`num ${cls}`}>{cents(l.price)}</td><td className="r num">{num(l.size, 0)}</td><td className="r num faint">{usd(l.size * l.price)}</td></tr>)}</tbody></table>}</div>
+          <table><tbody>{lv.map((l: any, i: number) => <tr key={i}><td className={`num ${cls}`}>{cents(l.price)}</td><td className="r num">{num(l.size, l.size < 10 ? 2 : 0)}</td><td className="r num faint">{usd(l.size * l.price)}</td></tr>)}</tbody></table>}</div>
       ))}
       <div className="tiny faint" style={{ gridColumn: '1/-1' }}>Fetched {ago(q.fetchedAt)} from the public CLOB book. Liquidity can change between refreshes.</div>
     </div>
