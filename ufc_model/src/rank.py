@@ -82,7 +82,7 @@ def build_candidates(bouts: list[dict], cons: pd.DataFrame, C: dict) -> pd.DataF
                 continue
             mkt = q.market
             is_ml = mkt == "ML"
-            cond = 1 - p_push if mkt in ("ML", "MOST_SIG", "MOST_TD") else 1.0
+            cond = 1 - p_push if (mkt in ("ML", "MOST_SIG", "MOST_TD") or p_push > 0) else 1.0
             p_model = p_win / cond               # ML: conditional on no draw
             if is_ml:                            # the win model's raw probability (the sim is tilted to p_final)
                 p_model = B["p_model_ml"] if key == "ML|A" else 1 - B["p_model_ml"]
@@ -194,7 +194,7 @@ def price_targets(bouts: list[dict], cons: pd.DataFrame, C: dict) -> pd.DataFram
             mkt = market_of(key)
             p_win, push = prob_of(P, key)
             is_ml = mkt == "ML"
-            cond = 1 - push if mkt in ("ML", "MOST_SIG", "MOST_TD") else 1.0
+            cond = 1 - push if (mkt in ("ML", "MOST_SIG", "MOST_TD") or push > 0) else 1.0
             pm = p_win / cond
             if is_ml:
                 pm = B["p_model_ml"] if key == "ML|A" else 1 - B["p_model_ml"]

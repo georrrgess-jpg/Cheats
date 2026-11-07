@@ -23,8 +23,8 @@ def price_bout(sim: dict, book_rules: dict | None = None, sig_lines: dict | None
     rules = book_rules or {}
     dq_ko = rules.get("dq_counts_as_ko", True)
     w, m, t, er, R = sim["winner"], sim["method"], sim["end_t"], sim["end_round"], sim["rounds"]
-    mk = np.array([market_method(x, dq_ko) for x in m]) if False else np.where(
-        np.isin(m, ["KO", "DOC"]), "KO", np.where(m == "SUB", "SUB", np.where(m == "DRAW", "DRAW", "DEC")))
+    mk = np.where(np.isin(m, ["KO", "DOC"] + (["DQ"] if dq_ko else [])), "KO",
+                  np.where(m == "SUB", "SUB", np.where(m == "DRAW", "DRAW", "DEC")))
     fin = np.isin(mk, ["KO", "SUB"])
     P = {}
     A, B, D = w == 0, w == 1, w == 2
@@ -146,7 +146,8 @@ def outcome_vector(sim: dict, key: str):
     neg = key.startswith("NOT:")
     k = key[4:] if neg else key
     w, m, t, er, R = sim["winner"], sim["method"], sim["end_t"], sim["end_round"], sim["rounds"]
-    mk = np.where(np.isin(m, ["KO", "DOC"]), "KO", np.where(m == "SUB", "SUB", np.where(m == "DRAW", "DRAW", "DEC")))
+    mk = np.where(np.isin(m, ["KO", "DOC", "DQ"]), "KO", np.where(m == "SUB", "SUB", np.where(m == "DRAW", "DRAW",
+                  np.where(np.isin(m, ["U-DEC", "S-DEC", "M-DEC"]), "DEC", "OTHER"))))
     fin = np.isin(mk, ["KO", "SUB"])
     side = lambda s: w == (0 if s == "A" else 1)
     p = k.split("|")
@@ -178,11 +179,34 @@ def outcome_vector(sim: dict, key: str):
             arr = sim["tdA"] if p[1] == "A" else sim["tdB"]
             v = arr > float(p[3]) if p[2] == "OVER" else arr < float(p[3])
         elif p[0] == "KD":
-            v = (sim["kdA"] + sim["kdB"] > 0) if p[1] == "YES" else (sim["kdA"] > 0) if p[1] == "A" else (sim["kdB"] > 0)
+            tot = sim["kdA"] + sim["kdB"]
+            v = {"YES": tot > 0, "NO": tot == 0, "A": sim["kdA"] > 0, "B": sim["kdB"] > 0}[p[1]]
         elif p[0] == "METHOD3":
             v = (mk == p[1]) if p[1] != "DEC" else ~fin
         elif p[0] == "DRAW":
             v = (w == 2) if p[1] == "YES" else (w != 2)
+        elif p[0] in ("MOST_SIG", "MOST_TD"):
+            a_, b_ = (sim["sigA"], sim["sigB"]) if p[0] == "MOST_SIG" else (sim["tdA"], sim["tdB"])
+            v = (a_ > b_) if p[1] == "A" else (b_ > a_) if p[1] == "B" else (a_ == b_)
+        elif p[0] == "DEC_TYPE":
+            s, typ = p[1].split(":")
+            codes = {"U": ["U-DEC"], "S": ["S-DEC"], "M": ["M-DEC"], "SM": ["S-DEC", "M-DEC"]}[typ]
+            v = side(s) & np.isin(m, codes)
+        elif p[0] == "ROUND_GRP":
+            s, g = p[1].split(":")
+            who = (w == 0) | (w == 1) if s == "ANY" else side(s)
+            if g == "R1-2":
+                v = who & fin & (er <= 2)
+            elif g == "R3-4":
+                v = who & fin & np.isin(er, [3, 4])
+            else:
+                v = (who & fin & (er == R)) | ((mk == "DEC") & (who if s != "ANY" else True)) | ((w == 2) & (s == "ANY"))
+        elif p[0] == "RD_METHOD":
+            s, mm, r = p[1].split(":")
+            who = np.ones_like(fin) if s == "ANY" else side(s)
+            v = who & (mk == mm) & (er == int(r[1:]))
+        elif p[0] == "TIME_OU":
+            v = (t > float(p[2]) * 60) if p[1] == "OVER" else (t <= float(p[2]) * 60)
     except Exception:
         return None
     if v is None:

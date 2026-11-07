@@ -59,7 +59,11 @@ def main(argv=None):
         oof = walk_forward(X, y, meta, start, Cc, use_gb=a.gb, seed=C["seed"])
         configs_tried.append(f"LR C={Cc}")
         res[Cc] = oof
-    bestC = min(res, key=lambda c: metrics(sigmoid(res[c].z_lr), res[c].y)["log_loss"])
+    # choose C on the tuning window only (the hold-out stays untouched)
+    _hs = lambda o: o.date < o.date.max() - pd.DateOffset(months=C["winprob"]["holdout_months"])
+    bestC = min(res, key=lambda c: metrics(sigmoid(res[c].z_lr[_hs(res[c])]), res[c].y[_hs(res[c])])["log_loss"])
+    if bestC != C["winprob"]["C"]:
+        print(f"NOTE: tuning-window best C={bestC} differs from config C={C['winprob']['C']}; update config.yaml")
     oof = res[bestC]
     oof.to_parquet(ROOT / "data/processed/oof.parquet")
     hold_start = oof.date.max() - pd.DateOffset(months=C["winprob"]["holdout_months"])

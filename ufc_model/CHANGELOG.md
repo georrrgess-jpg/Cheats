@@ -14,3 +14,14 @@
 - Win model: C 0.5 → 0.05 (walk-forward log loss), LR + GB ensemble (w_gb 0.3 from out-of-fold).
 - Min two-sided books 2 → 1 with a 1.25× edge requirement for single-book markets (most props are only on the Kambi books).
 - Robustness weight in the composite score: share of shrink-weight perturbations (±25%) under which a bet still clears.
+- §30 independent audit fixes:
+  - grading vectors for MOST_SIG/MOST_TD/DEC_TYPE/ROUND_GRP/RD_METHOD/TIME_OU (they were ungradable and counted as uncorrelated)
+  - KD|NO graded correctly
+  - DQ → KO bucket in grading
+  - the running calibration file now appends
+  - each pick graded once even if logged by several runs
+  - Kelly with pushes: f = (bp − q)/(b(p+q))
+  - whole-number sig lines compared on the push-excluded scale
+  - KD YES/NO devigged as a pair
+  - backtest picks C on the tuning window only
+  - Not changed (documented in ASSUMPTIONS): league-level look-ahead in league_rates; KD per head strike exposure is all head strikes while the sim applies it to standing head strikes only (absorbed by the KO calibration scales).

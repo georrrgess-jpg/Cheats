@@ -46,6 +46,8 @@ def group_of_key(key: str) -> str:
         return "DRAW"
     if p[0] == "DIST":
         return "DIST"
+    if p[0] == "KD" and p[1] in ("YES", "NO"):
+        return "KD"
     return k
 
 

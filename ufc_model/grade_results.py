@@ -81,6 +81,8 @@ def main(argv=None):
     res = actual_outcomes(T, card, ecfg["date"])
     picks = pd.read_csv(ROOT / "data/picks_log.csv")
     picks = picks[picks.event == a.event]
+    # grade each bet once: keep the latest logged row per selection (re-runs append the same pick again)
+    picks = picks.drop_duplicates(["bout_key", "selection_key"], keep="last")
     if not len(res):
         print("Event not in the dataset yet (it usually appears within a day). Re-run later.")
         return 1
@@ -107,17 +109,23 @@ def main(argv=None):
         rows.append({**r._asdict(), "result": g, "pnl": pnl, "clv": clv, "sim_percentile": pct})
     gr = pd.DataFrame(rows).drop(columns=["Index"])
     allp = pd.read_csv(ROOT / "data/picks_log.csv")
-    allp.loc[allp.event == a.event, "result"] = gr.result.values
-    allp.loc[allp.event == a.event, "pnl"] = gr.pnl.values
-    if len(closing):
-        allp.loc[allp.event == a.event, "closing_odds"] = [
-            (lambda c: c.median_american.iloc[0] if len(c) else np.nan)(closing[(closing.bout_key == b) & (closing.key == k)])
-            for b, k in zip(gr.bout_key, gr.selection_key)]
+    for col in ("result", "pnl", "closing_odds"):
+        allp[col] = allp[col].astype(object)
+    for r in gr.itertuples():
+        msk = (allp.event == a.event) & (allp.bout_key == r.bout_key) & (allp.selection_key == r.selection_key)
+        allp.loc[msk, "result"] = r.result
+        allp.loc[msk, "pnl"] = r.pnl
+        if len(closing):
+            c = closing[(closing.bout_key == r.bout_key) & (closing.key == r.selection_key)]
+            if len(c):
+                allp.loc[msk, "closing_odds"] = c.median_american.iloc[0]
     allp.to_csv(ROOT / "data/picks_log.csv", index=False)
     done = gr[gr.result.isin(["win", "loss"])]
     exp_w = done.p_final.sum()
     cal = ROOT / "output/calibration_running.csv"
-    cr = pd.concat([pd.read_csv(cal)] if cal.exists() else [] + [done.assign(event=a.event)[["event", "market", "p_final", "result"]]])
+    new = done.assign(event=a.event)[["event", "market", "p_final", "result"]]
+    old = pd.read_csv(cal) if cal.exists() else pd.DataFrame(columns=new.columns)
+    cr = pd.concat([old[old.event != a.event], new], ignore_index=True)
     cr.to_csv(cal, index=False)
     L = [f"# Review: {a.event}", "",
          f"- Graded {len(done)} bets: {int((done.result == 'win').sum())} won vs. {exp_w:.1f} expected; P&L {gr.pnl.sum():+.2f} units on {gr.stake_units.sum():.1f} staked.",

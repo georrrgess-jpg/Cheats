@@ -52,3 +52,21 @@ def test_ml_draw_is_push():
     assert push == pytest.approx(pr["probs"]["DRAW|YES"])
     nw, _ = prob_of(pr["probs"], "NOT:METHOD|A:KO")
     assert nw == pytest.approx(1 - pr["probs"]["METHOD|A:KO"])
+
+
+def test_grading_vectors():
+    from src.markets import outcome_vector
+    s = fake_sim(1)
+    s["winner"][:] = 0; s["method"][:] = "DQ"; s["kdA"][:] = 0; s["kdB"][:] = 0; s["end_t"][:] = 400; s["end_round"][:] = 2
+    s["sigA"][:] = 30; s["sigB"][:] = 20; s["tdA"][:] = 1; s["tdB"][:] = 1
+    ov = lambda k: outcome_vector(s, k)[0]
+    assert ov("METHOD|A:KO") == 1 and ov("METHOD|A:DEC") == 0 and ov("DIST|YES") == 0
+    assert ov("KD|NO") == 1 and ov("KD|YES") == 0
+    assert ov("MOST_SIG|A") == 1 and ov("MOST_TD|TIE") == 1
+    assert ov("ROUND_GRP|A:R1-2") == 1 and ov("RD_METHOD|A:KO:R2") == 1 and ov("TIME_OU|UNDER|7.5") == 1
+    assert ov("DEC_TYPE|A:U") == 0
+
+
+def test_kelly_push():
+    from src.staking import kelly_fraction
+    assert kelly_fraction(0.5, 0.2, 2.2) == pytest.approx(0.3125)

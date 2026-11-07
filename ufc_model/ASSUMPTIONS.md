@@ -22,3 +22,4 @@
 - Line shopping off: EV uses the median price across BestFightOdds books; the best price and book are shown for reference only.
 - Polymarket and Kalshi quotes are included in the consensus. Reason: they're liquid and near-vig-free, but count them as reference prices, not necessarily bettable books.
 - MOST_SIG / MOST_TD ('has more sig strikes / takedowns'): a tie is graded as a push and the model compares tie-excluded probabilities. Reason: books devig these two-way; per-book tie rules are unknown (flag).
+- KD power/chin exposure = all head sig strikes landed; the sim applies KDs to standing head strikes only. Absorbed by the calibrated KO scales. Flagged by the §30 audit.

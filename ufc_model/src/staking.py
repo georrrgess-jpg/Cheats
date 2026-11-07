@@ -6,13 +6,13 @@ import pandas as pd
 
 
 def kelly_fraction(p_win: float, p_push: float, dec: float) -> float:
-    """Full-Kelly fraction for a bet that can push: maximize p log(1+bf) + q log(1-f). Closed form
-    ignoring the push outcome's zero return: f* = (b p - q) / b with q = 1 - p - push."""
+    """Full-Kelly fraction for a bet that can push: maximize p log(1+bf) + q log(1-f) (a push returns the stake).
+    f* = (b p - q) / (b (p + q)) with q = 1 - p - push."""
     b = dec - 1.0
     q = 1.0 - p_win - p_push
-    if b <= 0:
+    if b <= 0 or p_win + q <= 0:
         return 0.0
-    return max(0.0, (b * p_win - q) / b)
+    return max(0.0, (b * p_win - q) / (b * (p_win + q)))
 
 
 def stake(bets: pd.DataFrame, S: dict) -> pd.DataFrame:
