@@ -1,0 +1,169 @@
+# UFC betting model configuration. Every tunable lives here (no magic numbers in code).
+seed: 20261107
+
+events:
+  # --event "<name>" looks up this table. Add new cards here or build one with src/scrape_card.py.
+  "UFC Vegas 124":
+    card_file: data/cards/ufc_vegas_124.csv
+    date: "2026-11-07"
+    venue: "Meta APEX"
+    is_apex: true
+    cage_size_ft: 25
+    bfo_event_urls:
+      - https://www.bestfightodds.com/events/ufc-vegas-124-4437
+      - https://www.bestfightodds.com/events/ufc-vegas-124-4439
+    output_prefix: UFC_Vegas_124
+
+data:
+  dataset_base_url: https://raw.githubusercontent.com/Greco1899/scrape_ufc_stats/main/
+  dataset_files: [ufc_event_details.csv, ufc_fight_results.csv, ufc_fight_stats.csv,
+                  ufc_fight_details.csv, ufc_fighter_details.csv, ufc_fighter_tott.csv]
+  raw_cache: data/raw_cache
+  processed: data/processed
+  rates_min_year: 2010        # fights before this are used for Elo only (sparse/less reliable stats)
+  model_min_year: 2012        # win-model training rows start here
+  user_agent: "ufc-model/0.1 (personal research tool; python-requests)"
+  request_delay_s: 1.5
+  max_retries: 4
+
+names:
+  fuzzy_threshold: 0.86       # token-sort similarity needed for a fuzzy match (restricted to tonight's card)
+
+features:
+  half_life_days: 600         # time-decay half-life for rate estimates (~20 months)
+  prior_minutes: 30           # empirical-Bayes prior strength, in UFC minutes, for per-minute rates
+  prior_attempts_td: 8        # prior strength for TD accuracy/defense (attempts)
+  prior_head_kd: 120          # prior strength for KD power/chin (head strikes)
+  prior_sub: 6                # prior strength for sub threat (expected attempts)
+  low_sample_fights: 3
+  low_sample_minutes: 45
+  short_notice_days: 21
+
+elo:
+  k: 32                       # tuned by walk-forward log loss (see BACKTEST.md)
+  init: 1500
+  init_women: 1500
+  scale: 400
+  finish_boost: 0.0           # optional K boost for finishes; 0 = off (backtest did not show a gain)
+  debut_penalty: -60          # UFC debutants start below the mean (typical debut win rate < 50%)
+
+winprob:
+  C: 0.5                      # inverse L2 strength for logistic regression
+  backtest_start: "2022-01-01"
+  holdout_months: 6           # last N months held out of calibration/tuning
+  calibration: platt
+  refit: monthly
+
+sim:
+  n_sims: 20000
+  n_sims_tilt: 4000           # sims per bisection step when solving for the skill tilt
+  n_sims_boot: 4000
+  step_s: 30
+  tilt_tol: 0.005
+  tilt_max: 0.9               # |tilt| above this flags the bout (sim and win model disagree)
+  form_sigma: 0.28            # per-fighter night-to-night lognormal form sigma (calibrated)
+  pace_sigma: 0.15            # shared fight pace factor sigma
+  calib_bouts: 400            # historical bouts used for simulated method of moments
+  calib_sims: 1500
+  calib_iters: 4
+  doctor_stoppage_base: 0.00004   # per step, scaled by damage
+  dq_rate: 0.0
+  draw_base: 0.012            # P(draw | decision) when perfectly even; decays with closeness
+
+markets:
+  sig_line_grid_halfwidth: 30 # price targets: lines around the median for sig strikes
+  td_lines: [0.5, 1.5, 2.5, 3.5]
+  rounds_lines: [0.5, 1.5, 2.5, 3.5, 4.5]
+  time_lines_min: [5.0, 7.5, 10.0, 12.5]
+
+devig:
+  two_way: power
+  multi_way: shin
+  one_sided_margin: 0.06      # assumed overround for one-sided markets (flagged)
+  stale_minutes: 60
+  outlier_prob_gap: 0.06      # flag a book whose devigged prob is this far from the cross-book median
+
+shrink:                       # logit(p_final) = w*logit(p_model) + (1-w)*logit(p_fair)
+  ML: 0.30
+  DRAW: 0.30
+  METHOD: 0.40
+  METHOD3: 0.40
+  ITD: 0.40
+  DEC_TYPE: 0.40
+  DIST: 0.45
+  ROUNDS_OU: 0.45
+  START_RD: 0.45
+  END_RD: 0.45
+  ROUND: 0.40
+  ROUND_GRP: 0.40
+  RD_METHOD: 0.40
+  TIME_OU: 0.45
+  SIG_OU: 0.60
+  SIG_TOT_OU: 0.60
+  TD_OU: 0.60
+  KD: 0.50
+  MOST_SIG: 0.50
+  MOST_TD: 0.50
+  main_card_mult: 0.85        # multiply w by this for main-card bouts (sharper markets)
+  main_event_mult: 0.75
+
+filters:
+  edge_min:
+    ML: 0.03
+    METHOD: 0.04
+    METHOD3: 0.04
+    ITD: 0.04
+    DIST: 0.04
+    ROUNDS_OU: 0.04
+    START_RD: 0.04
+    END_RD: 0.04
+    ROUND: 0.04
+    ROUND_GRP: 0.04
+    RD_METHOD: 0.04
+    DEC_TYPE: 0.04
+    TIME_OU: 0.04
+    DRAW: 0.04
+    SIG_OU: 0.05
+    SIG_TOT_OU: 0.05
+    TD_OU: 0.05
+    KD: 0.05
+    MOST_SIG: 0.05
+    MOST_TD: 0.05
+  p_ev_pos_min: 0.60
+  low_sample_edge_mult: 1.5   # stricter edge requirement when a fighter is low-sample/debutant
+  red_flag_gap: 0.15          # |p_model - p_fair| above this: never auto-recommend
+  shortest_odds: -300
+  short_odds_ev_min: 0.08     # EV needed to bet shorter than shortest_odds
+  max_bets: 6
+  min_books: 2                # need >= this many books quoting both sides for a consensus fair price
+  exclude_markets: [DRAW, RD_METHOD]   # long-shot exotic markets: priced but not auto-recommended
+  max_price: 1000             # don't auto-recommend prices longer than +1000
+  corr_max: 0.5               # bets in the same bout with |corr| above this: keep only the best
+
+staking:
+  bankroll_units: 100
+  unit_dollars: null          # null = units only
+  kelly_fraction: 0.25
+  max_bet_frac: 0.02
+  max_bout_frac: 0.03
+  max_card_frac: 0.09
+  round_units: 0.1
+
+uncertainty:
+  boot_reps: 50               # T1: 50, T2: 200
+  ml_logit_se_floor: 0.20     # minimum logit SE on the win-model output
+  debut_logit_se: 0.45
+  interval: 0.80
+
+books:                        # grading rules per book (defaults used when a book is unknown)
+  default:
+    draw_ml: void             # moneyline when the fight is a draw: void | loss
+    dq_counts_as_ko: true
+    technical_decision_is_decision: true
+    half_round_boundary_s: 150   # O/U x.5 rounds boundary = 2:30 into the round
+    exact_boundary_is_over: true # a finish at exactly 2:30 of the half round grades as over
+  bettable: []                # empty = use every book on BestFightOdds (line shopping off: consensus/median price)
+  line_shopping: false
+
+grading:
+  min_bets_before_retune: 150
