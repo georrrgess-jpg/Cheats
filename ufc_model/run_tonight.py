@@ -123,7 +123,8 @@ def main(argv=None):
         lr = LRModel(C["winprob"]["C"]).fit(X, y)
         # ---------------------------------------------------------------- simulator globals
         if a.recalibrate or not (ROOT / "data/processed/sim_globals.json").exists():
-            calibrate(T, F, L, hold_start)
+            # production calibration: most recent 18 months (includes the backtest hold-out; see BACKTEST.md)
+            calibrate(T, F, L, T["fights"].date.max() + pd.Timedelta(days=1))
         G = load_globals()
         br = compute_baserates(T)
         ctx = {"temp": temp, "L": L, "G": G, "snaps": snaps}
@@ -172,6 +173,9 @@ def main(argv=None):
             p_final_ml = shrink(p_model_ml, p_fair_ml, w_ml)
             bp = make_params(sA, sB, L, r.weight_class, r.gender, r.scheduled_rounds, G)
             tilt, p_sim = solve_tilt(bp, p_final_ml, seed + r.bout_order, C["sim"]["n_sims_tilt"], G, C["sim"]["tilt_tol"])
+            # refine on the final sample (same seed and n as the sims used for pricing)
+            tilt, p_sim = solve_tilt(bp, p_final_ml, seed + 100 + r.bout_order, n_sims, G, C["sim"]["tilt_tol"] / 2,
+                                     lo=tilt - 0.25, hi=tilt + 0.25)
             sim = simulate(bp, n_sims, seed + 100 + r.bout_order, tilt, G)
             pr = price_bout(sim, grid_halfwidth=C["markets"]["sig_line_grid_halfwidth"], td_lines=C["markets"]["td_lines"])
             sim_pa = pr["probs"]["ML|A"] / max(1 - pr["probs"]["DRAW|YES"], 1e-9)
@@ -191,7 +195,9 @@ def main(argv=None):
                 "w_ml": w_ml,
             })
             sims[r.bout_key] = {k: sim[k] for k in SIM_KEYS}
-            p_draws = sigmoid(z + se * np.random.default_rng(seed + 5 * r.bout_order).standard_normal(reps))
+            p_draws = sigmoid(z + se * np.random.default_rng(seed + 5 * r.bout_order).standard_normal(max(reps, 200)))
+            B["ml_draws"] = p_draws.tolist()
+            p_draws = p_draws[:reps]
             p_draws_final = [shrink(float(p), p_fair_ml, w_ml) for p in p_draws]
             boot_jobs.append((len(bouts), (sA, sB, L, r.weight_class, r.gender, int(r.scheduled_rounds), p_draws_final, G,
                                            1000, 2500 if a.fast else C["sim"]["n_sims_boot"], seed + 31 * r.bout_order,
@@ -232,6 +238,13 @@ def main(argv=None):
         "most_likely": passing.sort_values("p_final", ascending=False).head(5) if len(passing) else passing,
         "best_overall": passing.sort_values("composite", ascending=False).head(5) if len(passing) else passing,
     }
+    if len(cand_df):
+        nf = cand_df.fail.str.count(";") + (cand_df.fail != "").astype(int)
+        near = cand_df[(cand_df.ev > 0) & (nf == 1) & (cand_df.p_ev_pos >= C["filters"]["p_ev_pos_min"]) &
+                       ~cand_df.market.isin(C["filters"]["exclude_markets"])].sort_values("composite", ascending=False).head(8)
+    else:
+        near = cand_df
+    lists["near_misses"] = near
     disagreements = cand_df.assign(gap=(cand_df.p_model - cand_df.p_fair).abs()).sort_values("gap", ascending=False).head(10) if len(cand_df) else cand_df
     # pass list
     pass_list = []

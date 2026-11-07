@@ -127,6 +127,8 @@ def prob_of(P: dict, key: str) -> tuple[float, float]:
         push = P.get(f"PUSH|SIG|{parts[1]}|{parts[3]}", 0.0)
     if k.startswith("ML|"):
         push = P["DRAW|YES"]     # moneyline is void on a draw (default book rule)
+    if k.startswith(("MOST_SIG|", "MOST_TD|")) and not k.endswith("|TIE"):
+        push = P[k.split("|")[0] + "|TIE"]   # a tie is graded as a push (default; flagged as an assumption)
     if neg:
         return (1 - P[k] - push, push)
     return (P[k], push)

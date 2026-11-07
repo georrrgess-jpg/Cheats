@@ -75,7 +75,8 @@ def write_all(o: dict, C: dict):
         parts = []
         for title, df in [("RECOMMENDED (staked)", rec), ("Best Value (top 5 EV)", lists["best_value"]),
                           ("Most Likely to Hit (+EV, all filters)", lists["most_likely"]),
-                          ("Best Overall (composite)", lists["best_overall"])]:
+                          ("Best Overall (composite)", lists["best_overall"]),
+                          ("NEAR MISSES - not recommended (fail exactly one filter)", lists.get("near_misses", pd.DataFrame()))]:
             t = _bet_table(df.sort_values(["bout_order"]) if len(df) and title.startswith("REC") else df, C)
             hdr = pd.DataFrame([{t.columns[0] if len(t.columns) else "segment": f"== {title} =="}])
             parts += [hdr, t, pd.DataFrame([{}])]
@@ -249,6 +250,11 @@ def write_report(o, C):
     if len(rec):
         b = rec.sort_values("composite", ascending=False).iloc[0]
         L += ["", f"### Bet of the Night: {b.bet} ({b.bout}) at {fmt_american(b.odds)}"] + bet_case(b, bymap[b.bout_key], o["pt"])
+    nm = o["lists"].get("near_misses")
+    if nm is not None and len(nm):
+        L += ["", "## Near misses (NOT recommended; each fails exactly one filter)", "",
+              "| Bout | Bet | Odds | Model | Fair | Final | Edge | EV/$1 | P(EV>0) | Fails | Flags |", "|---|---|---|---|---|---|---|---|---|---|---|"]
+        L += [f"| {r.bout} | {r.bet} | {fmt_american(r.odds)} | {_pct(r.p_model)} | {_pct(r.p_fair)} | {_pct(r.p_final)} | {100*r.edge:+.1f} | {r.ev:+.3f} | {_pct(r.p_ev_pos)} | {r.fail} | {r.flags} |" for r in nm.itertuples()]
     L += ["", "## Pass list"] + [f"- {k}: {r}" for k, r in o["pass_list"]]
     L += ["", "## Bout breakdowns"]
     for B in bouts:
@@ -288,12 +294,18 @@ def write_handoff(o, C):
         L.append(f"- {r.bout}: {r.bet} {fmt_american(r.odds)} | {_pct(r.p_model)}/{_pct(r.p_fair)}/{_pct(r.p_final)} | EV {r.ev:+.3f} | {_pct(r.p_ev_pos)} | {r.stake_units:.1f}u | {r.flags}")
     if not len(rec):
         L.append("- none qualify")
+        nm = o["lists"].get("near_misses")
+        if nm is not None and len(nm):
+            L.append("Near misses (not recommended):")
+            L += [f"- {r.bout}: {r.bet} {fmt_american(r.odds)} | {_pct(r.p_model)}/{_pct(r.p_fair)}/{_pct(r.p_final)} | fails: {r.fail}" for r in nm.head(5).itertuples()]
     pt = o["pt"]
     if len(pt):
         top = pt[pt.market.isin(["DIST", "ROUNDS_OU", "SIG_TOT_OU", "SIG_OU", "TD_OU"])].copy()
-        top = top[np.isfinite(top.min_american_to_bet)]
-        top = top.assign(d=(top.p_model - 0.5).abs()).sort_values("d").groupby("bout_key").head(1).head(12)
-        L += ["", "Price targets (fair → bet at or better):"]
+        top = top[np.isfinite(top.min_american_to_bet) & ~top.key.str.startswith("NOT:")]
+        top = top[top.market.isin(["SIG_OU", "SIG_TOT_OU", "TD_OU"])]
+        top = top.assign(d=(top.p_model - 0.5).abs()).sort_values("d").groupby(["bout_key", "market"]).head(1)
+        top = top.sort_values(["bout_order", "market"]).head(14)
+        L += ["", "Price targets, lines nearest the sim median (fair → bet at or better; full list in the Price Targets sheet):"]
         for r in top.itertuples():
             L.append(f"- {r.bout}: {r.selection} fair {fmt_american(r.fair_american)} → {fmt_american(r.min_american_to_bet)}")
     bt = ROOT / "output/backtest_headline.txt"

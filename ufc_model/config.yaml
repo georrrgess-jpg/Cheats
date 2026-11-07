@@ -64,7 +64,7 @@ sim:
   tilt_max: 0.9               # |tilt| above this flags the bout (sim and win model disagree)
   form_sigma: 0.28            # per-fighter night-to-night lognormal form sigma (calibrated)
   pace_sigma: 0.15            # shared fight pace factor sigma
-  calib_bouts: 400            # historical bouts used for simulated method of moments
+  calib_bouts: 480            # historical bouts used for simulated method of moments
   calib_sims: 1500
   calib_iters: 6
   finish_alpha_grid: [0.0, 0.5, 1.0, 1.5]   # fighter finish-propensity strength, chosen by likelihood
@@ -88,18 +88,18 @@ devig:
 shrink:                       # logit(p_final) = w*logit(p_model) + (1-w)*logit(p_fair)
   ML: 0.30
   DRAW: 0.30
-  METHOD: 0.35
+  METHOD: 0.40
   METHOD3: 0.40
-  ITD: 0.35
+  ITD: 0.40
   DEC_TYPE: 0.40
-  DIST: 0.30                  # lowered from 0.45: sim P(dist) is under-dispersed vs market (see ASSUMPTIONS)
-  ROUNDS_OU: 0.30
-  START_RD: 0.30
-  END_RD: 0.30
-  ROUND: 0.30
-  ROUND_GRP: 0.30
+  DIST: 0.40                  # spec 0.45; 0.40 pending a clean hold-out check of the recalibrated sim (ASSUMPTIONS)
+  ROUNDS_OU: 0.40
+  START_RD: 0.40
+  END_RD: 0.40
+  ROUND: 0.35
+  ROUND_GRP: 0.35
   RD_METHOD: 0.40
-  TIME_OU: 0.30
+  TIME_OU: 0.40
   SIG_OU: 0.60
   SIG_TOT_OU: 0.60
   TD_OU: 0.60
@@ -137,7 +137,8 @@ filters:
   shortest_odds: -300
   short_odds_ev_min: 0.08     # EV needed to bet shorter than shortest_odds
   max_bets: 6
-  min_books: 2                # need >= this many books quoting both sides for a consensus fair price
+  min_books: 1                # need >= this many books quoting both sides for a consensus fair price
+  thin_edge_mult: 1.25        # stricter edge when only one book quotes both sides
   exclude_markets: [DRAW, RD_METHOD]   # long-shot exotic markets: priced but not auto-recommended
   max_price: 1000             # don't auto-recommend prices longer than +1000
   corr_max: 0.5               # bets in the same bout with |corr| above this: keep only the best

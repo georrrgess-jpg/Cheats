@@ -76,24 +76,34 @@ def ev_per_dollar(p_win, p_push, dec):
 
 def price_target(p_model_draws: np.ndarray, p_model: float, push: float, w: float, edge_min: float,
                  p_ev_min: float, hold: float, is_ml: bool) -> float:
-    """Worst decimal price at which the bet still clears edge_min and P(EV>0) >= p_ev_min.
-    p_fair at a hypothetical price = implied(price) minus half the typical hold (two-way)."""
+    """Worst (lowest) decimal price at which the bet still clears edge_min and P(EV>0) >= p_ev_min.
+    p_fair at a hypothetical price = implied(price) minus half the typical hold (two-way market).
+    Edge after shrinkage is NOT monotonic in price (it falls again at extreme long odds), so scan from
+    the fair price outward in 0.5-pt implied-probability steps, then bisect between the last failing
+    and first passing grid points."""
+    cond = 1 - push if is_ml else 1.0
+    zd = logit(np.clip(p_model_draws, 1e-4, 1 - 1e-4))
+
     def ok(d):
-        pf = np.clip(1 / d - hold / 2, 1e-4, 0.9999)
-        cond = 1 - push if is_ml else 1.0
+        pf = float(np.clip(1 / d - hold / 2, 1e-4, 0.9999))
         pfin = shrink(p_model, pf, w)
-        if pfin - pf < edge_min:
+        if pfin - pf < edge_min or ev_per_dollar(pfin * cond, push, d) <= 0:
             return False
-        pf_draws = sig(w * logit(p_model_draws) + (1 - w) * logit(pf))
-        evs = ev_per_dollar(pf_draws * cond, push, d)
-        return np.mean(evs > 0) >= p_ev_min and ev_per_dollar(pfin * cond, push, d) > 0
-    lo, hi = 1.01, 60.0
-    if not ok(hi):
-        return float("nan")
-    for _ in range(40):
-        mid = 0.5 * (lo + hi)
-        if ok(mid):
-            hi = mid
-        else:
-            lo = mid
-    return hi
+        pf_draws = sig(w * zd + (1 - w) * logit(pf))
+        return float(np.mean(ev_per_dollar(pf_draws * cond, push, d) > 0)) >= p_ev_min
+
+    q0 = min(0.995, p_model * cond + hold / 2 + 0.005)
+    prev = 1.0 / q0
+    for q in np.arange(q0, 0.005, -0.005):
+        d = 1.0 / q
+        if ok(d):
+            lo, hi = prev, d
+            for _ in range(25):
+                mid = 0.5 * (lo + hi)
+                if ok(mid):
+                    hi = mid
+                else:
+                    lo = mid
+            return hi
+        prev = d
+    return float("nan")

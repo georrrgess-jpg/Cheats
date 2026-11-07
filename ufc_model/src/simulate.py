@@ -30,6 +30,8 @@ DEFAULT_GLOBALS = {
     "dmg_scale": 60.0, "dmg_round_decay": 0.75,
     "round_haz": [1.6, 1.0, 0.8, 0.8, 0.8],
     "strike_scale": {"M_low": 1.0, "M_mid": 1.0, "M_high": 1.0, "F": 1.0},
+    "td_scale": {"M_low": 1.0, "M_mid": 1.0, "M_high": 1.0, "F": 1.0},
+    "grapple_sigma": 0.6, "form_sigma": 0.28,
     "ko_scale": {"M_low": 1.0, "M_mid": 1.0, "M_high": 1.0, "F": 1.0},
     "sub_scale": {"M_low": 1.0, "M_mid": 1.0, "M_high": 1.0, "F": 1.0},
     # judging model: z = b . [sig diff, kd diff, td diff, ctrl diff (min), ground diff]; P(unanimous|z), P(draw|z)
@@ -81,7 +83,9 @@ def simulate(bp: BoutParams, n: int, seed: int, tilt: float = 0.0, G: dict | Non
     C = cfg()
     G = G or load_globals()
     rng = np.random.default_rng(seed)
-    fs = C["sim"]["form_sigma"] if form_sigma is None else form_sigma
+    fs = G.get("form_sigma", C["sim"]["form_sigma"]) if form_sigma is None else form_sigma
+    gs = G.get("grapple_sigma", 0.6)
+    tds = G.get("td_scale", {}).get(bp.group, 1.0)
     ps = C["sim"]["pace_sigma"] if pace_sigma is None else pace_sigma
     step = C["sim"]["step_s"]
     dt_min = step / 60.0
@@ -93,6 +97,8 @@ def simulate(bp: BoutParams, n: int, seed: int, tilt: float = 0.0, G: dict | Non
     formA = np.exp(fs * rng.standard_normal(n) - fs * fs / 2)
     formB = np.exp(fs * rng.standard_normal(n) - fs * fs / 2)
     pace = np.exp(ps * rng.standard_normal(n) - ps * ps / 2)
+    gA = np.exp(gs * rng.standard_normal(n) - gs * gs / 2) * tds   # night-to-night grappling intent/form
+    gB = np.exp(gs * rng.standard_normal(n) - gs * gs / 2) * tds
     pos = np.zeros(n, np.int8)                        # 0 standing, 1 A top, 2 B top
     alive = np.ones(n, bool)
     z = lambda: np.zeros(n)
@@ -139,8 +145,8 @@ def simulate(bp: BoutParams, n: int, seed: int, tilt: float = 0.0, G: dict | Non
             pkB = np.clip(B.kd_per_head * tB * np.sqrt(formB[idx]) * (1 + dmgA[idx] / G["dmg_scale"]), 0, 0.5)
             kA = np.where(st, rng.binomial(hA, pkA), 0); kB = np.where(st, rng.binomial(hB, pkB), 0)
             # ---- takedowns (standing)
-            tdaA_ = np.where(st, rng.poisson(A.td_att * pace[idx] * np.sqrt(tA) * dt_min), 0)
-            tdaB_ = np.where(st, rng.poisson(B.td_att * pace[idx] * np.sqrt(tB) * dt_min), 0)
+            tdaA_ = np.where(st, rng.poisson(A.td_att * gA[idx] * np.sqrt(tA) * dt_min), 0)
+            tdaB_ = np.where(st, rng.poisson(B.td_att * gB[idx] * np.sqrt(tB) * dt_min), 0)
             tdA_ = rng.binomial(tdaA_, np.clip(A.td_acc * tA, 0.01, 0.95))
             tdB_ = rng.binomial(tdaB_, np.clip(B.td_acc * tB, 0.01, 0.95))
             # ---- submissions (attempts)
@@ -239,8 +245,9 @@ def solve_tilt(bp: BoutParams, target_pa: float, seed: int, n: int, G=None, tol=
         return lo, flo
     if target_pa >= fhi:
         return hi, fhi
-    t, v = 0.0, f(0.0)
-    for _ in range(18):
+    t = 0.5 * (lo + hi)
+    v = f(t)
+    for _ in range(14):
         if abs(v - target_pa) < tol / 2:
             break
         if v < target_pa:

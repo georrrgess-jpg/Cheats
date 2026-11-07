@@ -1,27 +1,28 @@
 # STATUS
 
-- **Clock:** 14:10 ET, Sat Nov 7 2026
-- **Current milestone:** M1 (data ready), in progress
-- **Next step:** write src/baserates.py + data-quality validation (src/checks.py validate_data), then src/simulate.py
+- **Clock:** 14:51 ET, Sat Nov 7 2026
+- **Current milestone:** M5 (T2 upgrades), in progress. **R1 shipped at 14:50** (1h40m early)
+- **Next step:** T2. (a) Clean hold-out check of the recalibrated sim (calibrate on the 18 months before 2026-04-30, re-run backtest sim hold-out). (b) GB ensemble into the win model (w_gb=0.3 helped hold-out LL 0.658→0.657). (c) 200 bootstrap reps. (d) Start watch_odds.py. (e) Independent audit subagent (§30). (f) R2 at 19:30: `python run_tonight.py --event "UFC Vegas 124" --release R2`
 
 ## Milestones
-- [x] M0 Setup + card verified (14:10): venv, dataset, `output/card_verification.md`, all 28 names resolved
-- [ ] M1 Data ready (target 15:00)
-- [ ] M2 Features + win model (15:35). Feature pass and walk-forward LR already work (LL 0.646 vs. Elo 0.681)
-- [ ] M3 Simulator + fair prices (16:05)
-- [ ] M4 = R1 (16:30)
-- [ ] M5 T2 upgrades
+- [x] M0 Setup + card verified (14:10)
+- [x] M1 Data ready (14:30)
+- [x] M2 Features + win model (14:30). Leakage tests pass
+- [x] M3 Simulator + fair prices (14:47). §23 checks pass for all 14 bouts; Price Targets sheet written
+- [x] M4 = R1 (14:50). No bet clears every filter; near misses listed (all red flags)
+- [ ] M5 T2 upgrades: full backtest done (calibration only, no historical odds); GB eval done; rest in progress
 - [ ] M6 = R2 (19:30)
-- [ ] M7 Post-event
+- [ ] M7 Post-event (grade_results.py written)
 
 ## Inputs
-Every Handoff Input was blank, so defaults are in use: cloud, `./ufc_model`, 100 units, 1 unit = 1%, no books (consensus / median price, line shopping off), no Odds API key, raw-paste props, no pick'em, max 6 bets, no parlays, shortest −300.
+Every Handoff Input was blank, so defaults are in use: cloud, `./ufc_model`, 100 units, 1 unit = 1%, no books (consensus / median price, line shopping off), no Odds API key, raw-paste props (none received yet), no pick'em, max 6 bets, no parlays, shortest −300.
 
 ## Open issues / flags
-- UFCStats.com has a JS bot check, so I use the Greco1899 public dataset (fresh through Oct 31 2026).
-- UFC.com 403 and Tapology 403. MMADecisions isn't reachable, so the T2 round-scoring model uses the fallback.
-- Debutants: Souza, Calderon (4 days' notice), Lorenço, Degli. Short notice: Cortes-Acosta and Walker (9 days). Booking dates for the Petroski and Petersen replacements weren't verified.
-- BestFightOdds carries ML, method, rounds, distance and ITD props for all 14 bouts. No sig-strike or takedown lines yet (asked the user).
+- No sig-strike / takedown / knockdown quotes (not on BestFightOdds); Price Targets only until the user pastes lines.
+- Red-flag bouts (|model − market| > 15 pts): Raposo-Degli ML (Degli debut), Ko-Turman ML, Cortes-Acosta-Walker rounds/distance (HW 5-round, short notice), Kondratavičius-Petroski rounds.
+- Debutants: Souza, Calderon (4 days' notice), Lorenço, Degli. Short notice: Cortes-Acosta and Walker.
+- Booking dates for the Petroski and Petersen replacements weren't verified.
+- Sim calibration window is the last 18 months (finish rates rose in 2026). The hold-out check in BACKTEST.md predates this recalibration.
 
 ## Last run
-- none yet
+- run id: 20261107T194839Z-fa4555; outputs: output/UFC_Vegas_124_model.xlsx, output/report.md, output/handoff_summary.md, output/predictions.json, data/picks_log.csv (empty: no bets)

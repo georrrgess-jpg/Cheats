@@ -82,15 +82,19 @@ def build_candidates(bouts: list[dict], cons: pd.DataFrame, C: dict) -> pd.DataF
                 continue
             mkt = q.market
             is_ml = mkt == "ML"
-            cond = 1 - p_push if is_ml else 1.0
+            cond = 1 - p_push if mkt in ("ML", "MOST_SIG", "MOST_TD") else 1.0
             p_model = p_win / cond               # ML: conditional on no draw
+            if is_ml:                            # the win model's raw probability (the sim is tilted to p_final)
+                p_model = B["p_model_ml"] if key == "ML|A" else 1 - B["p_model_ml"]
             w = weight_for(mkt, C, B["segment"], B["is_main_event"])
             p_final = shrink(p_model, q.p_fair, w)
             dec = american_to_decimal(q.median_american)
             ev = ev_per_dollar(p_final * cond, p_push, dec)
             # bootstrap
-            if draws:
-                pm = np.array([prob_of(d, key)[0] / (1 - prob_of(d, key)[1] if is_ml else 1.0) for d in draws])
+            if is_ml and B.get("ml_draws") is not None:
+                pm = np.array(B["ml_draws"]) if key == "ML|A" else 1 - np.array(B["ml_draws"])
+            elif draws:
+                pm = np.array([prob_of(d, key)[0] / (1 - prob_of(d, key)[1] if cond < 1 else 1.0) for d in draws])
                 pm = pm[np.isfinite(pm)]
             else:
                 pm = np.array([p_model])
@@ -110,21 +114,23 @@ def build_candidates(bouts: list[dict], cons: pd.DataFrame, C: dict) -> pd.DataF
                 flags.append("RED FLAG: check news")
             if q.one_sided:
                 flags.append("one-sided market")
-            if q.n_two_sided < F["min_books"]:
-                flags.append(f"thin market ({q.n_two_sided} book)")
+            if q.n_two_sided <= 1:
+                flags.append(f"thin market ({q.n_two_sided} two-sided book)")
             if B["tilt_flag"]:
                 flags.append("large sim tilt")
             if q.outlier_books:
                 flags.append(f"outlier price: {q.outlier_books}")
             edge = p_final - q.p_fair
             emin = F["edge_min"].get(mkt, 0.04) * (F["low_sample_edge_mult"] if (low_sample or B["debut"]) else 1.0)
+            if q.n_two_sided == 1:
+                emin *= F.get("thin_edge_mult", 1.0)
             reasons = []
             if ev <= 0: reasons.append("EV<=0")
             if edge < emin: reasons.append(f"edge<{emin:.1%}")
             if p_ev_pos < F["p_ev_pos_min"]: reasons.append("P(EV>0) low")
             if red: reasons.append("red flag")
             if B["tilt_flag"]: reasons.append("tilt")
-            if q.n_two_sided < F["min_books"]: reasons.append("thin/one-sided")
+            if q.n_two_sided < F["min_books"]: reasons.append("one-sided (no two-sided book)")
             if mkt in F["exclude_markets"]: reasons.append("exotic market")
             if q.median_american > F["max_price"]: reasons.append("long shot")
             if q.median_american < F["shortest_odds"] and ev < F["short_odds_ev_min"]: reasons.append("too short")
@@ -181,16 +187,21 @@ def price_targets(bouts: list[dict], cons: pd.DataFrame, C: dict) -> pd.DataFram
             mkt = market_of(key)
             p_win, push = prob_of(P, key)
             is_ml = mkt == "ML"
-            cond = 1 - push if is_ml else 1.0
+            cond = 1 - push if mkt in ("ML", "MOST_SIG", "MOST_TD") else 1.0
             pm = p_win / cond
+            if is_ml:
+                pm = B["p_model_ml"] if key == "ML|A" else 1 - B["p_model_ml"]
             if not (0.02 < pm < 0.98):
                 continue
             w = weight_for(mkt, C, B["segment"], B["is_main_event"])
-            dr = np.array([prob_of(d, key)[0] / ((1 - prob_of(d, key)[1]) if is_ml else 1.0) for d in draws]) if draws else np.array([pm])
+            if is_ml and B.get("ml_draws") is not None:
+                dr = np.array(B["ml_draws"]) if key == "ML|A" else 1 - np.array(B["ml_draws"])
+            else:
+                dr = np.array([prob_of(d, key)[0] / ((1 - prob_of(d, key)[1]) if cond < 1 else 1.0) for d in draws]) if draws else np.array([pm])
             dr = np.clip(dr[np.isfinite(dr)], 1e-4, 1 - 1e-4)
             hold = holds.get(mkt, 0.045 if is_ml else 0.07)
             emin = F["edge_min"].get(mkt, 0.04) * (F["low_sample_edge_mult"] if (B["low_sample"] or B["debut"]) else 1.0)
-            d_min = price_target(dr, pm, push if not is_ml else push, w, emin, F["p_ev_pos_min"], hold, is_ml)
+            d_min = price_target(dr, pm, push, w, emin, F["p_ev_pos_min"], hold, cond < 1)
             rows.append({"bout_order": B["bout_order"], "segment": B["segment"], "bout_key": B["bout_key"],
                          "bout": f"{B['fighter_a']} vs {B['fighter_b']}", "market": mkt, "key": key,
                          "selection": describe_key(key, B["fighter_a"], B["fighter_b"]), "p_model": pm,

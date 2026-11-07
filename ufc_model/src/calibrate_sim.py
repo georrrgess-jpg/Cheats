@@ -53,9 +53,10 @@ def fit_judging(tables, G: dict) -> dict:
     return G
 
 
-def calib_sample(tables, F, n_bouts: int, seed: int, end: pd.Timestamp) -> pd.DataFrame:
+def calib_sample(tables, F, n_bouts: int, seed: int, end: pd.Timestamp, start: pd.Timestamp | None = None) -> pd.DataFrame:
     f = tables["fights"]
-    f = f[(f.date >= "2022-07-01") & (f.date < end) & f.std_format & (f.result_type != "NC") & f.fighter_a_id.notna()
+    start = start if start is not None else end - pd.DateOffset(months=18)
+    f = f[(f.date >= start) & (f.date < end) & f.std_format & (f.result_type != "NC") & f.fighter_a_id.notna()
           & f.fighter_b_id.notna() & (f.method != "DQ")].copy()
     f["grp"] = [group_of(w, g) for w, g in zip(f.weight_class, f.gender)]
     rng = np.random.default_rng(seed)
@@ -86,10 +87,15 @@ def actual_targets(s: pd.DataFrame, tables) -> pd.DataFrame:
     return pd.DataFrame(rows).set_index("grp")
 
 
+_FF = {}
+
+
 def sim_targets(s, F, L_all, G, n_sims, seed) -> pd.DataFrame:
     feats = F.set_index(["fight_id", "side"])
+    ffd = _FF.get("ffd")
     acc = {}
     LL, LLd = [], []
+    COV, TDANY_S, TDANY_A = [], [], []
     for i, r in enumerate(s.itertuples(index=False)):
         sA = feats.loc[(r.fight_id, "A")].to_dict(); sB = feats.loc[(r.fight_id, "B")].to_dict()
         wc = r.weight_class if r.weight_class != "Catchweight" else "ALL"
@@ -101,6 +107,13 @@ def sim_targets(s, F, L_all, G, n_sims, seed) -> pd.DataFrame:
         act_mk = "KO" if r.method in ("KO", "DOC") else ("SUB" if r.method == "SUB" else "DEC")
         LL.append(np.log(max((mk_sim == act_mk).mean(), 1e-3)))
         LLd.append(np.log(max(((~fin) if act_mk == "DEC" else fin).mean(), 1e-3)))
+        if ffd is not None:
+            for fid, arr, tarr in ((r.fighter_a_id, sim["sigA"], sim["tdA"]), (r.fighter_b_id, sim["sigB"], sim["tdB"])):
+                if (r.fight_id, fid) in ffd.index:
+                    act = ffd.loc[(r.fight_id, fid)]
+                    q10, q90 = np.percentile(arr, [10, 90])
+                    COV.append(float(q10 <= act.sig_l <= q90))
+                    TDANY_S.append(float((tarr >= 1).mean())); TDANY_A.append(float(act.td_l >= 1))
         a = acc.setdefault(r.grp, {k: [] for k in ("ko", "sub", "dec", "r1", "r2", "r3p", "sig_tot", "ctrl_tot", "td_tot")})
         a["ctrl_tot"].append((sim["ctrlA"] + sim["ctrlB"]).mean()); a["td_tot"].append((sim["tdA"] + sim["tdB"]).mean())
         a["ko"].append(np.isin(m, ["KO", "DOC"]).mean()); a["sub"].append((m == "SUB").mean())
@@ -110,13 +123,21 @@ def sim_targets(s, F, L_all, G, n_sims, seed) -> pd.DataFrame:
         a["sig_tot"].append((sim["sigA"] + sim["sigB"]).mean())
     out = pd.DataFrame({g: {k: float(np.mean(v)) for k, v in a.items()} for g, a in acc.items()}).T
     out.attrs["ll_method"] = float(np.mean(LL)); out.attrs["ll_dist"] = float(np.mean(LLd))
+    out.attrs["sig_cov80"] = float(np.mean(COV)) if COV else np.nan
+    out.attrs["td_any_sim"] = float(np.mean(TDANY_S)) if TDANY_S else np.nan
+    out.attrs["td_any_act"] = float(np.mean(TDANY_A)) if TDANY_A else np.nan
     return out
 
 
-def calibrate(tables, F, L_all, holdout_start: pd.Timestamp, save=True) -> tuple[dict, pd.DataFrame]:
+def calibrate(tables, F, L_all, end: pd.Timestamp, save=True, out_path=None, start=None) -> tuple[dict, pd.DataFrame]:
+    """Calibrate on bouts in [end - 18 months, end). Production: end = day after the latest event.
+    Backtest hold-out check: end = hold-out start (no overlap)."""
     C = cfg()
-    G = fit_judging(tables, load_globals())
-    s = calib_sample(tables, F, C["sim"]["calib_bouts"], C["seed"], holdout_start)
+    holdout_start = end
+    from .simulate import DEFAULT_GLOBALS
+    G = fit_judging(tables, json.loads(json.dumps(DEFAULT_GLOBALS)))
+    _FF["ffd"] = tables["fighter_fight"].set_index(["fight_id", "fighter_id"])
+    s = calib_sample(tables, F, C["sim"]["calib_bouts"], C["seed"], end, start)
     act = actual_targets(s, tables)
     hist = []
     f = tables["fights"]; f = f[(f.date >= "2020-01-01") & f.std_format & (f.result_type != "NC")]
@@ -149,13 +170,26 @@ def calibrate(tables, F, L_all, holdout_start: pd.Timestamp, save=True) -> tuple
             if g not in sim.index:
                 continue
             G["strike_scale"][g] *= float(np.clip(act.loc[g, "sig_tot"] / sim.loc[g, "sig_tot"], 0.6, 1.5))
+            G["td_scale"][g] *= float(np.clip(act.loc[g, "td_tot"] / max(sim.loc[g, "td_tot"], 1e-3), 0.5, 2.0))
+        # dispersion: grappling form sigma -> P(fighter lands 1+ TD); strike form sigma -> 80% coverage
+        ta, ts = sim.attrs["td_any_act"], sim.attrs["td_any_sim"]
+        if np.isfinite(ta) and np.isfinite(ts):
+            G["grapple_sigma"] = float(np.clip(G["grapple_sigma"] * (ts / ta) ** 1.5, 0.2, 1.6))
+        cov = sim.attrs["sig_cov80"]
+        if np.isfinite(cov):
+            G["form_sigma"] = float(np.clip(G["form_sigma"] * (1 + 1.5 * (0.80 - cov)), 0.15, 0.7))
+        log.info("iter %d: td_any sim %.3f act %.3f -> grapple_sigma %.2f; sig cov80 %.3f -> form_sigma %.3f; dec %s",
+                 it, ts, ta, G["grapple_sigma"], cov, G["form_sigma"], sim["dec"].round(3).to_dict())
+        for g in act.index:
+            if g not in sim.index:
+                continue
             G["ko_scale"][g] *= float(np.clip((act.loc[g, "ko"] / max(sim.loc[g, "ko"], 1e-3)) ** 1.1, 0.5, 2.0))
             G["sub_scale"][g] *= float(np.clip((act.loc[g, "sub"] / max(sim.loc[g, "sub"], 1e-3)) ** 1.1, 0.5, 2.0))
         hist.append(sim.assign(iter=it))
         log.info("calib iter %d: sim KO %s / act %s", it, sim["ko"].round(3).to_dict(), act["ko"].round(3).to_dict())
     # 5-round fights: one scalar on all hazards, matched to the pooled 5-round decision share
     f5 = tables["fights"]
-    f5 = f5[(f5.date >= "2017-01-01") & (f5.date < holdout_start) & f5.std_format & (f5.scheduled_rounds == 5)
+    f5 = f5[(f5.date >= "2019-01-01") & (f5.date < holdout_start) & f5.std_format & (f5.scheduled_rounds == 5)
             & (f5.result_type != "NC") & f5.fighter_a_id.notna() & f5.fighter_b_id.notna()].copy()
     f5["grp"] = [group_of(w, g) for w, g in zip(f5.weight_class, f5.gender)]
     feats = F.set_index(["fight_id", "side"])
@@ -174,7 +208,9 @@ def calibrate(tables, F, L_all, holdout_start: pd.Timestamp, save=True) -> tuple
     final = sim_targets(s, F, L_all, G, C["sim"]["calib_sims"], C["seed"] + 99)
     comp = act.join(final, rsuffix="_sim")
     G["_final_ll"] = {"ll_method": final.attrs["ll_method"], "ll_dist": final.attrs["ll_dist"]}
+    G["_calib_window"] = {"start": str(s.date.min().date()), "end": str(end.date()), "n_bouts": int(len(s))}
+    G["_final_disp"] = {"sig_cov80": final.attrs["sig_cov80"], "td_any_sim": final.attrs["td_any_sim"], "td_any_act": final.attrs["td_any_act"]}
     if save:
-        (ROOT / "data/processed/sim_globals.json").write_text(json.dumps(G, indent=1))
-        comp.to_csv(ROOT / "output/sim_calibration.csv")
+        (out_path or ROOT / "data/processed/sim_globals.json").write_text(json.dumps(G, indent=1))
+        comp.to_csv(ROOT / ("output/sim_calibration.csv" if out_path is None else "output/sim_calibration_backtest.csv"))
     return G, comp
