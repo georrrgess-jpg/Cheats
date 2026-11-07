@@ -13,3 +13,11 @@
 - APEX flag = Las Vegas Fight Night/ESPN events from 2020-05-30 on. Reason: no venue field in the dataset.
 - Elo: debutants start 60 points below the mean; K is 1.5× for a fighter's first 3 fights. Reason: debut win rates are below 50% and new fighters' ratings should move faster.
 - Win-model features are antisymmetric differences, fit with no intercept on both orientations. Reason: symmetry by construction (§13).
+- Fighter finish propensity: KO/SUB hazards × (shrunk KO-win rate of attacker × shrunk KO-loss rate of defender / league²)^α, 3 pseudo-fights prior, α=0.5 chosen by likelihood (0, 0.5, 1, 1.5 tried). Reason: without it the sim's P(distance) barely varied between bouts.
+- Distance/rounds/round-betting shrink weights lowered from 0.45 to 0.30, and method/ITD from 0.40 to 0.35. Reason: on tonight's 10 quoted bouts the sim's P(distance) averaged 51% vs. 35% in the market (correlation 0.62), and its calibration log loss on distance (0.647) only modestly beats base rates (0.693). The market knows pre-UFC records the model doesn't have.
+- Sim calibration: hazard scales by weight group (KO, SUB), strike volume by group, global round-hazard curve, escape rate (control time), and one 5-round hazard scalar, fit by simulated method of moments on 400 bouts (Jul 2022 → hold-out start) plus 160 five-round bouts (2017 →). Calibration sample does not overlap the 6-month hold-out.
+- Judging model (T1 fallback): fight-level logistic on sig/KD/TD/control/ground-strike differentials (in-sample accuracy 83%), with logistic P(unanimous | |z|) and P(draw | |z|). Reason: MMADecisions isn't reachable for round-level scorecards.
+- Ground strikes from bottom = 25% of the fighter's top rate; 80% of ground strikes land to the head. Reason: UFCStats doesn't split ground strikes by position.
+- Moneyline shrinkage compares draw-excluded probabilities (books void ML on a draw); EV then counts a draw as a push.
+- Line shopping off: EV uses the median price across BestFightOdds books; the best price and book are shown for reference only.
+- Polymarket and Kalshi quotes are included in the consensus. Reason: they're liquid and near-vig-free, but count them as reference prices, not necessarily bettable books.

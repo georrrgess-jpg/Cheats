@@ -167,7 +167,7 @@ def build_features(tables, L=None, extra_snapshots: list[tuple[str, str, str, st
     `extra_snapshots` = [(key, fighter_id, wc, gender, date)], elo object, final states)."""
     C = cfg()
     hl = C["features"]["half_life_days"]
-    L = L or league_rates(tables, C["data"]["rates_min_year"])
+    L = L or league_rates(tables, C["data"]["league_min_year"])
     fights = tables["fights"].sort_values(["date", "fight_id"]).reset_index(drop=True)
     ffd = {(r["fight_id"], r["fighter_id"]): r for r in tables["fighter_fight"].to_dict("records")}
     fr = tables["fight_rounds"]

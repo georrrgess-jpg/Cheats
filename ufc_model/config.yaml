@@ -20,6 +20,7 @@ data:
                   ufc_fight_details.csv, ufc_fighter_details.csv, ufc_fighter_tott.csv]
   raw_cache: data/raw_cache
   processed: data/processed
+  league_min_year: 2020      # league-average constants from the current era (pace drifted ~25% 2015->2021)
   rates_min_year: 2010        # fights before this are used for Elo only (sparse/less reliable stats)
   model_min_year: 2012        # win-model training rows start here
   user_agent: "ufc-model/0.1 (personal research tool; python-requests)"
@@ -65,7 +66,8 @@ sim:
   pace_sigma: 0.15            # shared fight pace factor sigma
   calib_bouts: 400            # historical bouts used for simulated method of moments
   calib_sims: 1500
-  calib_iters: 4
+  calib_iters: 6
+  finish_alpha_grid: [0.0, 0.5, 1.0, 1.5]   # fighter finish-propensity strength, chosen by likelihood
   doctor_stoppage_base: 0.00004   # per step, scaled by damage
   dq_rate: 0.0
   draw_base: 0.012            # P(draw | decision) when perfectly even; decays with closeness
@@ -86,18 +88,18 @@ devig:
 shrink:                       # logit(p_final) = w*logit(p_model) + (1-w)*logit(p_fair)
   ML: 0.30
   DRAW: 0.30
-  METHOD: 0.40
+  METHOD: 0.35
   METHOD3: 0.40
-  ITD: 0.40
+  ITD: 0.35
   DEC_TYPE: 0.40
-  DIST: 0.45
-  ROUNDS_OU: 0.45
-  START_RD: 0.45
-  END_RD: 0.45
-  ROUND: 0.40
-  ROUND_GRP: 0.40
+  DIST: 0.30                  # lowered from 0.45: sim P(dist) is under-dispersed vs market (see ASSUMPTIONS)
+  ROUNDS_OU: 0.30
+  START_RD: 0.30
+  END_RD: 0.30
+  ROUND: 0.30
+  ROUND_GRP: 0.30
   RD_METHOD: 0.40
-  TIME_OU: 0.45
+  TIME_OU: 0.30
   SIG_OU: 0.60
   SIG_TOT_OU: 0.60
   TD_OU: 0.60
