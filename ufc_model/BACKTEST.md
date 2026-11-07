@@ -70,6 +70,13 @@ Reliability by market (5 bins):
 
 Sig strikes per fighter: 80% interval coverage 77.8% (target 80%), CRPS 17.4, pinball@P50 12.6.
 
+**Reading the clean hold-out.** With the simulator calibrated only on the 18 months before the hold-out:
+- **Beats climatology:** takedowns (Brier 0.213 vs. 0.239), KO/TKO, Over 1.5 rounds and Over 2.5 rounds.
+- **Level-biased:**
+  - Distance: 48% predicted vs. 35% observed. Finishes jumped in the hold-out period itself.
+  - Sig strikes over the fighter's prior median: overconfident above 60%.
+- Production calibration now includes the latest 18 months, so tonight's level reflects the current finish rate. Resolution on distance is still weak, so distance and rounds keep a market-shrink weight of 0.40 (below the spec's 0.45), and sig-strike overs at high model probability deserve caution.
+
 ## Against the market
 
 No public historical UFC odds dataset was available inside this session's network, so **ROI, CLV and a vig-free-market baseline could not be backtested**. Consensus closing odds are being captured from tonight on (`data/odds_history.csv`, `watch_odds.py`) so future backtests can include them.
