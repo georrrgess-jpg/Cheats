@@ -121,13 +121,21 @@ def main(argv=None):
         hold_start = meta.date.max() - pd.DateOffset(months=C["winprob"]["holdout_months"])
         temp = fit_temperature(oof.z_lr[oof.date < hold_start].values, oof.y[oof.date < hold_start].values)
         lr = LRModel(C["winprob"]["C"]).fit(X, y)
+        ens = {"w_gb": 0.0}
+        ens_path = ROOT / "data/processed/ensemble.json"
+        if C["winprob"].get("ensemble", False) and ens_path.exists():
+            ens = json.loads(ens_path.read_text())
+            if ens.get("w_gb", 0) > 0:
+                from src.winprob import GBModel
+                gbm = GBModel(seed).fit(X, y)
+                log.info("ensemble on: w_gb=%.2f (out-of-fold weight from backtest.py)", ens["w_gb"])
         # ---------------------------------------------------------------- simulator globals
         if a.recalibrate or not (ROOT / "data/processed/sim_globals.json").exists():
             # production calibration: most recent 18 months (includes the backtest hold-out; see BACKTEST.md)
             calibrate(T, F, L, T["fights"].date.max() + pd.Timedelta(days=1))
         G = load_globals()
         br = compute_baserates(T)
-        ctx = {"temp": temp, "L": L, "G": G, "snaps": snaps}
+        ctx = {"temp": temp, "L": L, "G": G, "snaps": snaps, "ensemble": ens}
     else:
         temp, L, G, snaps = ctx["temp"], ctx["L"], ctx["G"], ctx["snaps"]
         br = compute_baserates(T, save=False)
@@ -157,7 +165,10 @@ def main(argv=None):
             sA, sB = snaps[f"{r.bout_key}|A"], snaps[f"{r.bout_key}|B"]
             ctx_df = pd.DataFrame({"weight_class": [r.weight_class]})
             Xb = pair_matrix(pd.DataFrame([sA]), pd.DataFrame([sB]), ctx_df)
-            z = float(lr.logit(Xb)[0]) * temp
+            z_lr = float(lr.logit(Xb)[0]) * temp
+            z = z_lr
+            if ens.get("w_gb", 0) > 0:
+                z = (1 - ens["w_gb"]) * z_lr + ens["w_gb"] * ens["temp_gb"] * float(gbm.logit(Xb)[0])
             se = max(float(lr.logit_se(Xb)[0]) * temp, C["uncertainty"]["ml_logit_se_floor"])
             debut = sA["n_fights"] == 0 or sB["n_fights"] == 0
             if debut:
@@ -266,7 +277,7 @@ def main(argv=None):
         else:
             reason = "market efficient: no +EV price at the consensus"
         pass_list.append((B["bout_key"], reason))
-    out = {"run_id": run_id, "release": a.release, "event": a.event, "card": card, "bouts": bouts, "cons": cons,
+    out = {"run_id": run_id, "release": a.release, "event": a.event, "card": card, "bouts": bouts, "cons": cons, "sims": sims,
            "quotes": quotes, "per_book": per_book, "cand": cand_df, "rec": rec, "lists": lists, "pt": pt,
            "disagreements": disagreements, "pass_list": pass_list, "odds_issues": odds_issues, "warns": warns,
            "cancelled_quotes": len(cancelled_quotes), "temp": temp, "base_rates": br, "elapsed": time.time() - t0}

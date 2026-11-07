@@ -49,10 +49,11 @@ elo:
   debut_penalty: -60          # UFC debutants start below the mean (typical debut win rate < 50%)
 
 winprob:
-  C: 0.5                      # inverse L2 strength for logistic regression
+  C: 0.05                     # inverse L2 strength (walk-forward LL: 0.05 -> 0.6456 vs 0.5 -> 0.6464)
   backtest_start: "2022-01-01"
   holdout_months: 6           # last N months held out of calibration/tuning
   calibration: platt
+  ensemble: true              # LR + gradient boosting, weight learned out of fold by backtest.py --gb
   refit: monthly
 
 sim:

@@ -187,24 +187,7 @@ def calibrate(tables, F, L_all, end: pd.Timestamp, save=True, out_path=None, sta
             G["sub_scale"][g] *= float(np.clip((act.loc[g, "sub"] / max(sim.loc[g, "sub"], 1e-3)) ** 1.1, 0.5, 2.0))
         hist.append(sim.assign(iter=it))
         log.info("calib iter %d: sim KO %s / act %s", it, sim["ko"].round(3).to_dict(), act["ko"].round(3).to_dict())
-    # 5-round fights: one scalar on all hazards, matched to the pooled 5-round decision share
-    f5 = tables["fights"]
-    f5 = f5[(f5.date >= "2019-01-01") & (f5.date < holdout_start) & f5.std_format & (f5.scheduled_rounds == 5)
-            & (f5.result_type != "NC") & f5.fighter_a_id.notna() & f5.fighter_b_id.notna()].copy()
-    f5["grp"] = [group_of(w, g) for w, g in zip(f5.weight_class, f5.gender)]
-    feats = F.set_index(["fight_id", "side"])
-    f5 = f5[[(i, "A") in feats.index and (i, "B") in feats.index for i in f5.fight_id]]
-    f5 = f5.sample(min(160, len(f5)), random_state=C["seed"])
-    act5 = 1 - f5.method.isin(["KO", "DOC", "SUB"]).mean()
-    G["five_rd_haz"] = 1.0
-    for it in range(4):
-        st5 = sim_targets(f5, F, L_all, G, 1000, C["seed"] + 77 + it)
-        sim5 = float((st5["dec"] * f5.grp.value_counts().reindex(st5.index).fillna(0)).sum() / len(f5))
-        # more hazard -> fewer decisions; finish odds ratio adjustment
-        ratio = ((1 - act5) / act5) / max((1 - sim5) / max(sim5, 1e-3), 1e-3)
-        G["five_rd_haz"] *= float(np.clip(ratio ** 0.8, 0.6, 1.7))
-        log.info("5-round calib: act dec %.3f sim dec %.3f -> five_rd_haz %.3f", act5, sim5, G["five_rd_haz"])
-    G["_five_rd"] = {"n": int(len(f5)), "act_dec": float(act5), "sim_dec_last": sim5}
+    calibrate_five_round(tables, F, L_all, G, holdout_start)
     final = sim_targets(s, F, L_all, G, C["sim"]["calib_sims"], C["seed"] + 99)
     comp = act.join(final, rsuffix="_sim")
     G["_final_ll"] = {"ll_method": final.attrs["ll_method"], "ll_dist": final.attrs["ll_dist"]}
@@ -214,3 +197,32 @@ def calibrate(tables, F, L_all, end: pd.Timestamp, save=True, out_path=None, sta
         (out_path or ROOT / "data/processed/sim_globals.json").write_text(json.dumps(G, indent=1))
         comp.to_csv(ROOT / ("output/sim_calibration.csv" if out_path is None else "output/sim_calibration_backtest.csv"))
     return G, comp
+
+
+def calibrate_five_round(tables, F, L_all, G, end, k_shrink=30.0, iters=4):
+    """Per weight group hazard scalar for 5-round fights (HW/LHW 5-rounders finish far more often than the
+    pooled 5-round rate). Target = group decision share shrunk toward the pooled 5-round share (k pseudo-fights)."""
+    C = cfg()
+    f5 = tables["fights"]
+    f5 = f5[(f5.date >= "2017-01-01") & (f5.date < end) & f5.std_format & (f5.scheduled_rounds == 5)
+            & (f5.result_type != "NC") & f5.fighter_a_id.notna() & f5.fighter_b_id.notna()].copy()
+    f5["grp"] = [group_of(w, g) for w, g in zip(f5.weight_class, f5.gender)]
+    feats = F.set_index(["fight_id", "side"])
+    f5 = f5[[(i, "A") in feats.index and (i, "B") in feats.index for i in f5.fight_id]]
+    f5["dec"] = ~f5.method.isin(["KO", "DOC", "SUB"])
+    pooled = f5.dec.mean()
+    tgt = {g: float((d.dec.sum() + k_shrink * pooled) / (len(d) + k_shrink)) for g, d in f5.groupby("grp")}
+    samp = pd.concat([d.sample(min(60, len(d)), random_state=C["seed"]) for _, d in f5.groupby("grp")])
+    G["five_rd_haz"] = {g: 1.0 for g in ("M_low", "M_mid", "M_high", "F")}
+    last = {}
+    for it in range(iters):
+        st5 = sim_targets(samp, F, L_all, G, 1000, C["seed"] + 77 + it)
+        for g in st5.index:
+            a, sdec = tgt[g], float(st5.loc[g, "dec"])
+            ratio = ((1 - a) / a) / max((1 - sdec) / max(sdec, 1e-3), 1e-3)
+            G["five_rd_haz"][g] *= float(np.clip(ratio ** 0.8, 0.5, 2.0))
+            last[g] = sdec
+        log.info("5-round calib iter %d: target dec %s sim dec %s -> %s", it, {k: round(v, 3) for k, v in tgt.items()},
+                 {k: round(v, 3) for k, v in last.items()}, {k: round(v, 3) for k, v in G["five_rd_haz"].items()})
+    G["_five_rd"] = {"n": int(len(f5)), "target_dec": tgt, "sim_dec_last": last, "raw": f5.groupby("grp").dec.agg(["mean", "count"]).to_dict()}
+    return G

@@ -45,6 +45,7 @@ def main(argv=None):
     ap.add_argument("--reduced", action="store_true")
     ap.add_argument("--no-sim", action="store_true")
     ap.add_argument("--gb", action="store_true", help="also evaluate the gradient-boosting model + ensemble")
+    ap.add_argument("--clean-holdout", action="store_true", help="recalibrate the sim on pre-hold-out data only for the hold-out check")
     a = ap.parse_args(argv)
     C = cfg()
     T = build_tables()
@@ -110,8 +111,17 @@ def main(argv=None):
 
     # ---------------------------------------------------------------- simulator hold-out reliability
     sim_lines = []
+    sim_note = ""
     if not a.no_sim:
-        G = load_globals()
+        if a.clean_holdout:
+            # calibrate the simulator ONLY on the 18 months before the hold-out (no overlap), then score the hold-out
+            from src.calibrate_sim import calibrate
+            gpath = ROOT / "data/processed/sim_globals_backtest.json"
+            G, _ = calibrate(T, F, L, hold_start, save=True, out_path=gpath)
+            sim_note = f"simulator calibrated on {G['_calib_window']['start']} → {G['_calib_window']['end']} (pre-hold-out only)"
+        else:
+            G = load_globals()
+            sim_note = "simulator globals = production calibration (overlaps the hold-out; optimistic)"
         fights = T["fights"].set_index("fight_id")
         Fi = F.set_index(["fight_id", "side"])
         ho = oof[hold].copy()
@@ -191,6 +201,7 @@ def main(argv=None):
           "Reliability, all walk-forward rows (10 bins of P(A)):", "", rel.round(3).to_markdown(index=False), ""]
     if sim_lines:
         Ld += ["## Simulator hold-out (last 6 months, props priced from each bout's pre-fight features, tilted to the model ML)", "",
+               f"Setup: {sim_note}.", "",
                pd.DataFrame(sim_lines).drop(columns=["reliability"]).round(4).to_markdown(index=False), "",
                "Reliability by market (5 bins):", ""] + [f"- **{s['market']}**: {s['reliability']}" for s in sim_lines] + [
                "", f"Sig strikes per fighter: 80% interval coverage {sim_meta['sig_80_coverage']:.1%} (target 80%), CRPS {sim_meta['sig_crps']:.1f}, pinball@P50 {sim_meta['sig_pinball50']:.1f}.", ""]

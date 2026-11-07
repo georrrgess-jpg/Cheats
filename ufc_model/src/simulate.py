@@ -113,7 +113,9 @@ def simulate(bp: BoutParams, n: int, seed: int, tilt: float = 0.0, G: dict | Non
     fat = bp.fatigue or {}
     for r in range(1, bp.rounds + 1):
         fr = fat.get(r, 1.0) * ss
-        rh = G["round_haz"][min(r, len(G["round_haz"])) - 1] * (G.get("five_rd_haz", 1.0) if bp.rounds == 5 else 1.0)
+        f5 = G.get("five_rd_haz", 1.0)
+        f5 = f5.get(bp.group, 1.0) if isinstance(f5, dict) else f5
+        rh = G["round_haz"][min(r, len(G["round_haz"])) - 1] * (f5 if bp.rounds == 5 else 1.0)
         q_kd = min(G["q_kd"] * ko_s * rh, 0.9)
         cA = A.cardio ** ((r - 1) / 2.0); cB = B.cardio ** ((r - 1) / 2.0)
         if r > 1:
@@ -233,30 +235,34 @@ def p_win_a(sim) -> float:
     return float(np.mean(sim["winner"] == 0))
 
 
-def solve_tilt(bp: BoutParams, target_pa: float, seed: int, n: int, G=None, tol=0.005, lo=-2.0, hi=2.0):
-    """Bisection on scalar tilt t so P(A wins | no draw) == target (common random numbers)."""
+def solve_tilt(bp: BoutParams, target_pa: float, seed: int, n: int, G=None, tol=0.005, lo=-2.0, hi=2.0, max_iter=8):
+    """Scalar tilt t so P(A wins | no draw) == target. P(A) is close to linear in t on the logit scale, so use
+    a secant method on logit(P) (bisection chases Monte Carlo noise because numpy's Poisson sampler does not
+    keep common random numbers monotone in the rate). Returns the best evaluated (t, P)."""
+    lg = lambda p: np.log(np.clip(p, 1e-4, 1 - 1e-4) / (1 - np.clip(p, 1e-4, 1 - 1e-4)))
+
     def f(t):
-        s = simulate(bp, n, seed, t, G)
-        w = s["winner"]
-        nd = np.mean(w != 2)
-        return np.mean(w == 0) / max(nd, 1e-9)
-    flo, fhi = f(lo), f(hi)
-    if target_pa <= flo:
-        return lo, flo
-    if target_pa >= fhi:
-        return hi, fhi
-    t = 0.5 * (lo + hi)
-    v = f(t)
-    for _ in range(14):
-        if abs(v - target_pa) < tol / 2:
+        w = simulate(bp, n, seed, t, G)["winner"]
+        return np.mean(w == 0) / max(np.mean(w != 2), 1e-9)
+    target = float(np.clip(target_pa, 0.002, 0.998))
+    lt = lg(target)
+    ta = float(np.clip(0.5 * (lo + hi), lo, hi)); fa = f(ta)
+    best = (abs(fa - target), ta, fa)
+    tb = float(np.clip(ta + (0.15 if fa < target else -0.15), lo, hi)); fb = f(tb)
+    best = min(best, (abs(fb - target), tb, fb))
+    for _ in range(max_iter):
+        if best[0] < tol / 2:
             break
-        if v < target_pa:
-            lo = t
-        else:
-            hi = t
-        t = 0.5 * (lo + hi)
-        v = f(t)
-    return t, v
+        ga, gb = lg(fa), lg(fb)
+        slope = (gb - ga) / (tb - ta) if abs(tb - ta) > 1e-9 and abs(gb - ga) > 1e-6 else 3.5
+        slope = float(np.clip(slope, 0.5, 15.0))     # P(A) increases with t
+        tn = float(np.clip(tb + (lt - gb) / slope, lo, hi))
+        if abs(tn - tb) < 1e-5:
+            break
+        fn = f(tn)
+        best = min(best, (abs(fn - target), tn, fn))
+        ta, fa, tb, fb = tb, fb, tn, fn
+    return best[1], best[2]
 
 
 def finish_mults(sx: dict | None, sy: dict | None, gender: str, G: dict) -> tuple[float, float]:

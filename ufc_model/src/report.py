@@ -186,6 +186,11 @@ def write_all(o: dict, C: dict):
         _write_sheet(xw, "Data Quality", pd.DataFrame({"data quality report": dq}))
         bt = (ROOT / "BACKTEST.md").read_text().splitlines() if (ROOT / "BACKTEST.md").exists() else ["backtest not run yet"]
         _write_sheet(xw, "Backtest Summary", pd.DataFrame({"BACKTEST.md": bt}))
+    try:
+        write_charts(o, C)
+    except Exception as e:  # charts are optional (T2)
+        import logging
+        logging.getLogger("ufc.report").warning("charts failed: %s", e)
     write_predictions(o, C)
     write_report(o, C)
     write_handoff(o, C)
@@ -343,3 +348,40 @@ def console(o):
     for r in rec.itertuples():
         print(f"{r.segment:6s} {r.bout[:34]:34s} {r.bet[:34]:34s} {fmt_american(r.odds):>6s}  model {100*r.p_final:5.1f}%  fair {100*r.p_fair:5.1f}%  EV {r.ev:+.3f}  P+ {100*r.p_ev_pos:4.0f}%  {r.stake_units:.1f}u")
     print(f"(pipeline {o['elapsed']:.0f}s)")
+
+
+def write_charts(o, C):
+    """Finish-time survival curves per bout and combined sig-strike distributions (T2, §24)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    d = ROOT / "output/charts"
+    d.mkdir(parents=True, exist_ok=True)
+    bouts = [B for B in o["bouts"] if "probs" in B]
+    fig, axes = plt.subplots(int(np.ceil(len(bouts) / 4)), 4, figsize=(16, 3.2 * np.ceil(len(bouts) / 4)), squeeze=False)
+    for ax, B in zip(axes.ravel(), bouts):
+        sim = o.get("sims", {}).get(B["bout_key"])
+        if sim is None:
+            continue
+        t = np.sort(sim["end_t"]) / 60
+        grid = np.linspace(0, B["rounds"] * 5, 200)
+        surv = 1 - np.searchsorted(t, grid, side="right") / len(t)
+        ax.plot(grid, surv, color="#2a6fdb")
+        for r in range(1, B["rounds"]):
+            ax.axvline(5 * r, color="#ccc", lw=0.8)
+        ax.set_ylim(0, 1); ax.set_title(f"{B['bout_key']}", fontsize=9)
+        ax.set_xlabel("minutes", fontsize=8); ax.set_ylabel("P(fight still going)", fontsize=8)
+    for ax in axes.ravel()[len(bouts):]:
+        ax.axis("off")
+    fig.tight_layout(); fig.savefig(d / "survival_curves.png", dpi=110); plt.close(fig)
+    fig, axes = plt.subplots(int(np.ceil(len(bouts) / 4)), 4, figsize=(16, 3.2 * np.ceil(len(bouts) / 4)), squeeze=False)
+    for ax, B in zip(axes.ravel(), bouts):
+        sim = o.get("sims", {}).get(B["bout_key"])
+        if sim is None:
+            continue
+        tot = sim["sigA"] + sim["sigB"]
+        ax.hist(tot, bins=60, color="#7a5af8", alpha=0.85)
+        ax.set_title(f"{B['bout_key']}: combined sig (median {np.median(tot):.0f})", fontsize=9)
+    for ax in axes.ravel()[len(bouts):]:
+        ax.axis("off")
+    fig.tight_layout(); fig.savefig(d / "sig_strike_distributions.png", dpi=110); plt.close(fig)

@@ -136,6 +136,13 @@ def build_candidates(bouts: list[dict], cons: pd.DataFrame, C: dict) -> pd.DataF
             if q.median_american < F["shortest_odds"] and ev < F["short_odds_ev_min"]: reasons.append("too short")
             if B.get("props_dropped") and mkt != "ML": reasons.append("sim check failed")
             dqw = 0.5 if B["debut"] else (0.75 if low_sample else 1.0)
+            # robustness (§20 sensitivity, cheap version): does the bet still clear EV>0 and the edge bar when the
+            # market-shrink weight moves +/-25%?  robustness = share of {w, 0.75w, 1.25w} where it clears.
+            rob_hits = 0
+            for wm in (0.75, 1.25):
+                pf2 = shrink(p_model, q.p_fair, min(w * wm, 1.0))
+                rob_hits += int((pf2 - q.p_fair >= emin) and ev_per_dollar(pf2 * cond, p_push, dec) > 0)
+            robust = (1 + rob_hits) / 3 if not reasons else rob_hits / 3
             rows.append({
                 "bout_order": B["bout_order"], "segment": B["segment"], "bout_key": B["bout_key"],
                 "bout": f"{B['fighter_a']} vs {B['fighter_b']}", "key": key, "market": mkt,
@@ -144,7 +151,7 @@ def build_candidates(bouts: list[dict], cons: pd.DataFrame, C: dict) -> pd.DataF
                 "decimal": dec, "p_model": p_model, "p_fair": q.p_fair, "p_final": p_final, "p_push": p_push,
                 "p_final_win": p_final * cond, "edge": edge, "ev": ev, "p_ev_pos": p_ev_pos, "p_lo": lo, "p_hi": hi,
                 "hold": q.hold, "flags": "; ".join(flags), "fail": "; ".join(reasons), "passes": not reasons,
-                "composite": ev * p_ev_pos * dqw, "w": w,
+                "composite": ev * p_ev_pos * dqw * robust, "robustness": robust, "w": w,
             })
     return pd.DataFrame(rows)
 
