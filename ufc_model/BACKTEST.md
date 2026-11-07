@@ -46,27 +46,29 @@ Reliability, all walk-forward rows (10 bins of P(A)):
 
 ## Simulator hold-out (last 6 months, props priced from each bout's pre-fight features, tilted to the model ML)
 
+Setup: simulator calibrated on 2024-11-02 → 2026-04-30 (pre-hold-out only).
+
 | market                                  |   n |   brier |   brier_climatology |   log_loss |   log_loss_climatology |   mean_pred |   obs_rate |
 |:----------------------------------------|----:|--------:|--------------------:|-----------:|-----------------------:|------------:|-----------:|
-| Goes the distance                       | 290 |  0.2353 |              0.227  |     0.6623 |                 0.6464 |      0.4989 |     0.3483 |
-| Over 1.5 rounds                         | 290 |  0.2378 |              0.2457 |     0.6693 |                 0.6845 |      0.6622 |     0.5655 |
-| Over 2.5 rounds                         | 290 |  0.24   |              0.2461 |     0.6731 |                 0.6854 |      0.5412 |     0.4379 |
-| Fight ends by KO/TKO                    | 290 |  0.2325 |              0.247  |     0.6574 |                 0.687  |      0.3368 |     0.4448 |
-| Fight ends by submission                | 290 |  0.163  |              0.1641 |     0.5079 |                 0.5098 |      0.1643 |     0.2069 |
-| Fighter 1+ takedown                     | 580 |  0.2546 |              0.2386 |     0.7081 |                 0.6701 |      0.6103 |     0.3931 |
-| Sig strikes over fighter's prior median | 461 |  0.2518 |              0.2394 |     0.7084 |                 0.6718 |      0.5236 |     0.397  |
+| Goes the distance                       | 290 |  0.2299 |              0.227  |     0.6512 |                 0.6464 |      0.483  |     0.3483 |
+| Over 1.5 rounds                         | 290 |  0.2329 |              0.2457 |     0.6568 |                 0.6845 |      0.6508 |     0.5655 |
+| Over 2.5 rounds                         | 290 |  0.2371 |              0.2461 |     0.6668 |                 0.6854 |      0.5348 |     0.4379 |
+| Fight ends by KO/TKO                    | 290 |  0.2278 |              0.247  |     0.6439 |                 0.687  |      0.3798 |     0.4448 |
+| Fight ends by submission                | 290 |  0.1648 |              0.1641 |     0.5181 |                 0.5098 |      0.1372 |     0.2069 |
+| Fighter 1+ takedown                     | 580 |  0.2125 |              0.2386 |     0.6137 |                 0.6701 |      0.42   |     0.3931 |
+| Sig strikes over fighter's prior median | 461 |  0.2397 |              0.2394 |     0.6792 |                 0.6718 |      0.4749 |     0.397  |
 
 Reliability by market (5 bins):
 
-- **Goes the distance**: 0.0-0.2: pred 0.17 vs obs 0.17 (n=6); 0.2-0.4: pred 0.33 vs obs 0.23 (n=65); 0.4-0.6: pred 0.49 vs obs 0.32 (n=147); 0.6-0.8: pred 0.68 vs obs 0.51 (n=67); 0.8-1.0: pred 0.85 vs obs 0.80 (n=5)
-- **Over 1.5 rounds**: 0.2-0.4: pred 0.35 vs obs 0.17 (n=6); 0.4-0.6: pred 0.53 vs obs 0.39 (n=72); 0.6-0.8: pred 0.69 vs obs 0.62 (n=176); 0.8-1.0: pred 0.85 vs obs 0.72 (n=36)
-- **Over 2.5 rounds**: 0.0-0.2: pred 0.17 vs obs 0.50 (n=2); 0.2-0.4: pred 0.33 vs obs 0.26 (n=39); 0.4-0.6: pred 0.50 vs obs 0.40 (n=152); 0.6-0.8: pred 0.68 vs obs 0.55 (n=86); 0.8-1.0: pred 0.84 vs obs 0.73 (n=11)
-- **Fight ends by KO/TKO**: 0.0-0.2: pred 0.13 vs obs 0.24 (n=59); 0.2-0.4: pred 0.31 vs obs 0.43 (n=140); 0.4-0.6: pred 0.48 vs obs 0.54 (n=74); 0.6-0.8: pred 0.69 vs obs 0.88 (n=17)
-- **Fight ends by submission**: 0.0-0.2: pred 0.13 vs obs 0.18 (n=213); 0.2-0.4: pred 0.26 vs obs 0.28 (n=75); 0.4-0.6: pred 0.43 vs obs 0.50 (n=2)
-- **Fighter 1+ takedown**: 0.0-0.2: pred 0.17 vs obs 0.00 (n=1); 0.2-0.4: pred 0.34 vs obs 0.09 (n=68); 0.4-0.6: pred 0.51 vs obs 0.31 (n=199); 0.6-0.8: pred 0.69 vs obs 0.45 (n=228); 0.8-1.0: pred 0.85 vs obs 0.70 (n=84)
-- **Sig strikes over fighter's prior median**: 0.0-0.2: pred 0.14 vs obs 0.22 (n=45); 0.2-0.4: pred 0.32 vs obs 0.26 (n=92); 0.4-0.6: pred 0.50 vs obs 0.40 (n=124); 0.6-0.8: pred 0.68 vs obs 0.48 (n=155); 0.8-1.0: pred 0.86 vs obs 0.56 (n=45)
+- **Goes the distance**: 0.0-0.2: pred 0.18 vs obs 0.14 (n=7); 0.2-0.4: pred 0.32 vs obs 0.27 (n=67); 0.4-0.6: pred 0.49 vs obs 0.31 (n=158); 0.6-0.8: pred 0.67 vs obs 0.55 (n=55); 0.8-1.0: pred 0.84 vs obs 1.00 (n=3)
+- **Over 1.5 rounds**: 0.2-0.4: pred 0.35 vs obs 0.14 (n=7); 0.4-0.6: pred 0.53 vs obs 0.41 (n=78); 0.6-0.8: pred 0.69 vs obs 0.61 (n=176); 0.8-1.0: pred 0.85 vs obs 0.83 (n=29)
+- **Over 2.5 rounds**: 0.0-0.2: pred 0.15 vs obs 1.00 (n=1); 0.2-0.4: pred 0.33 vs obs 0.22 (n=46); 0.4-0.6: pred 0.50 vs obs 0.40 (n=143); 0.6-0.8: pred 0.67 vs obs 0.58 (n=90); 0.8-1.0: pred 0.84 vs obs 0.70 (n=10)
+- **Fight ends by KO/TKO**: 0.0-0.2: pred 0.15 vs obs 0.21 (n=48); 0.2-0.4: pred 0.31 vs obs 0.44 (n=112); 0.4-0.6: pred 0.48 vs obs 0.47 (n=99); 0.6-0.8: pred 0.67 vs obs 0.77 (n=30); 0.8-1.0: pred 0.82 vs obs 0.00 (n=1)
+- **Fight ends by submission**: 0.0-0.2: pred 0.11 vs obs 0.19 (n=233); 0.2-0.4: pred 0.25 vs obs 0.27 (n=56); 0.4-0.6: pred 0.42 vs obs 1.00 (n=1)
+- **Fighter 1+ takedown**: 0.0-0.2: pred 0.17 vs obs 0.07 (n=14); 0.2-0.4: pred 0.31 vs obs 0.27 (n=251); 0.4-0.6: pred 0.49 vs obs 0.45 (n=265); 0.6-0.8: pred 0.66 vs obs 0.80 (n=50)
+- **Sig strikes over fighter's prior median**: 0.0-0.2: pred 0.13 vs obs 0.15 (n=53); 0.2-0.4: pred 0.30 vs obs 0.31 (n=123); 0.4-0.6: pred 0.51 vs obs 0.45 (n=145); 0.6-0.8: pred 0.68 vs obs 0.51 (n=106); 0.8-1.0: pred 0.85 vs obs 0.53 (n=34)
 
-Sig strikes per fighter: 80% interval coverage 71.6% (target 80%), CRPS 17.9, pinball@P50 13.0.
+Sig strikes per fighter: 80% interval coverage 77.8% (target 80%), CRPS 17.4, pinball@P50 12.6.
 
 ## Against the market
 
